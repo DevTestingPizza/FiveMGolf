@@ -11,19 +11,22 @@ namespace FiveMGolf
     public class Gfx : BaseScript
     {
         public static Scaleform Scale { get; private set; }
+        public static Scaleform Scale2 { get; private set; }
 
-        private static int currentHole = 2;
+        private static int currentHole = 1;
 
         private static int currentClubIndex = 0;
         private static int currentShotTypeIndex = 0;
         private static int currentShot = 2;
-
+        private static int ball = 0;
+        private static int currentClubObj = 0;
 
         private const int golfball_estimate_shot_blip_sprite = 390;
         private const int hole_flag_blip_sprite = 358;
 
         private readonly uint golfball_model_hash = (uint)GetHashKey("prop_golf_ball");
         private readonly uint golfball_tee_model_hash = (uint)GetHashKey("prop_golf_tee");
+
 
         public static readonly List<Hole> holes = new List<Hole>()
         {
@@ -184,8 +187,38 @@ namespace FiveMGolf
             "collision_958446q" // Short Putt
         };
 
+        private static readonly List<string> models = new List<string>()
+        {
+            "prop_golf_bag_01",
+            "prop_golf_bag_01b",
+            "prop_golf_bag_01c",
+            "prop_golf_ball",
+            "prop_golf_ball_p2",
+            "prop_golf_ball_p3",
+            "prop_golf_ball_p4",
+            "prop_golf_ball_tee",
+            "prop_golf_driver",
+            "prop_golf_iron_01",
+            "prop_golf_marker_01",
+            "prop_golf_pitcher_01",
+            "prop_golf_putter_01",
+            "prop_golf_tee",
+            "prop_golf_wood_01"
+        };
 
         /*
+
+    func_1711(uParam0, joaat("prop_golf_putter_01"));
+	func_1711(uParam0, joaat("prop_golf_ball"));
+	func_1711(uParam0, joaat("prop_golf_pitcher_01"));
+	func_1711(uParam0, joaat("prop_golf_wood_01"));
+	func_1711(uParam0, joaat("prop_golf_iron_01"));
+	func_1711(uParam0, joaat("caddy"));
+	func_1711(uParam0, joaat("prop_golf_bag_01b"));
+	func_1711(uParam0, joaat("prop_golfflag"));
+	func_1711(uParam0, joaat("prop_golf_tee"));
+	func_1711(uParam0, joaat("prop_golf_marker_01"));
+         
             prop_golf_bag_01        =   886428669
             prop_golf_bag_01b       =   -344128923
             prop_golf_bag_01c       =   -37837080
@@ -208,11 +241,10 @@ namespace FiveMGolf
         {
             RequestAdditionalText("SP_GOLF", 3);
             Scale = new Scaleform("GOLF");
+            Scale2 = new Scaleform("GOLF_FLOATING_UI");
             RegisterCommand("preview", new Action<int, List<object>, string>(async (int source, List<object> args, string rawCommand) =>
             {
                 DestroyAllCams(false);
-
-
                 if (!HasAnimDictLoaded("mini@golfhole_preview"))
                 {
                     RequestAnimDict("mini@golfhole_preview");
@@ -229,7 +261,6 @@ namespace FiveMGolf
                 SetCamActive(cam, true);
                 RenderScriptCams(true, false, 0, true, false);
                 DoScreenFadeIn(500);
-                await Delay(500);
                 if (PlayCamAnim(cam, $"hole_0{currentHole}_cam", "mini@golfhole_preview", -1317.17f, 60.494f, 53.56f, 0.0f, 0.0f, 0.0f, false, 2))
                 {
                     Debug.WriteLine("true : " + IsCamPlayingAnim(cam, $"hole_0{currentHole}_cam", "mini@golfhole_preview").ToString());
@@ -251,10 +282,96 @@ namespace FiveMGolf
                 DoScreenFadeIn(500);
 
             }), false);
-            RegisterCommand("putt", new Action<int, List<object>, string>(async (int source, List<object> args, string rawCommand) =>
-            {
-                
 
+            RegisterCommand("idle", new Action<int, List<object>, string>(async (int source, List<object> args, string rawCommand) =>
+            {
+                #region player animation/tasks
+                var holeCoords = holes[currentHole - 1].HoleCoords;
+                var offset = GetOffsetFromEntityInWorldCoords(ball, 0.2f, -0.6f, 0f);
+                float dx = offset.X - holeCoords.X;
+                float dy = offset.Y - holeCoords.Y;
+                float heading = GetHeadingFromVector_2d(dx, dy);
+
+                if (!HasAnimDictLoaded("mini@golfai"))
+                {
+                    RequestAnimDict("mini@golfai");
+                    while (!HasAnimDictLoaded("mini@golfai"))
+                    {
+                        await Delay(0);
+                    }
+                }
+                int output = 0;
+                ClearPedTasks(PlayerPedId());
+                OpenSequenceTask(ref output);
+
+                string anim = "";
+                string prop = "";
+                Vector3 clubOff = new Vector3(0f, 0f, 0f);
+                switch (currentClubIndex)
+                {
+                    case 0:
+                        prop = "prop_golf_driver";
+                        anim = "wood_idle_a";
+                        clubOff = new Vector3(clubOff.X + 0f, clubOff.Y + 0f, clubOff.Z + 0f);
+                        break;
+                    case 1:
+                    case 2:
+                        prop = "prop_golf_wood_01";
+                        anim = "wood_idle_a";
+                        clubOff = new Vector3(clubOff.X + 0f, clubOff.Y + 0f, clubOff.Z + 0f);
+                        break;
+                    case 3:
+                    case 4:
+                    case 5:
+                    case 6:
+                    case 7:
+                    case 8:
+                    case 9:
+                        prop = "prop_golf_iron_01";
+                        anim = "iron_idle_a";
+                        clubOff = new Vector3(clubOff.X + 0f, clubOff.Y + 0f, clubOff.Z + 0f);
+                        break;
+                    case 10:
+                    case 11:
+                    case 12:
+                        prop = "prop_golf_pitcher_01";
+                        anim = "wedge_idle_a";
+                        clubOff = new Vector3(clubOff.X + 0f, clubOff.Y + 0f, clubOff.Z + 0f);
+                        break;
+                    case 13:
+                        prop = "prop_golf_putter_01";
+                        anim = "putt_idle_a";
+                        clubOff = new Vector3(clubOff.X + 0f, clubOff.Y + 0f, clubOff.Z + 0f);
+                        break;
+                    default:
+                        break;
+                }
+
+                if (currentClubObj != 0)
+                {
+                    int tmpClub = currentClubObj;
+                    DeleteObject(ref tmpClub);
+                    currentClubObj = 0;
+                }
+                int club = CreateObject(GetHashKey(prop), offset.X, offset.Y, offset.Z, true, false, false);
+                currentClubObj = club;
+                //int club = CreateObject(GetHashKey("prop_golf_putter_01"), offset.X, offset.Y, offset.Z, true, false, false);
+
+                AttachEntityToEntity(club, PlayerPedId(), GetPedBoneIndex(PlayerPedId(), 28422), 0f, 0f, 0f, clubOff.X, clubOff.Y, clubOff.Z, false, false, false, false, 2, true);
+                //TaskFollowNavMeshToCoord(0, offset.X, offset.Y, offset.Z, 1f, -1, 0.25f, false, heading + 90f);
+                //TaskPlayAnim(0, "mini@golfai", "putt_approach_no_ball", 2.0f, -4.0f, -1, 0, 0, false, false, false);
+                //TaskPlayAnim(0, "mini@golfai", "putt_approach_no_ball", 4f, -4f, -1, 2, 0.999f, false, false, false);
+                TaskPlayAnim(0, "mini@golfai", anim, 2.0f, -4.0f, -1, 0, 0, false, false, false);
+                //TaskPlayAnim(0, "mini@golfai", anim, 4f, -4f, -1, 1, 0.999f, false, false, false);
+                TaskPlayAnim(0, "mini@golfai", "putt_intro", 4f, -4f, -1, 0, 0f, false, false, false);
+                TaskPlayAnim(0, "mini@golfai", "putt_action", 4f, -4f, -1, 0, 0f, false, false, false);
+                TaskPlayAnim(0, "mini@golfai", "putt_react_nuetral_01", 4f, -4f, -1, 0, 0f, false, false, false);
+                TaskPlayAnim(0, "mini@golfai", anim, 4f, -4f, -1, 1, 0.999f, false, false, false);
+
+                TaskPerformSequence(PlayerPedId(), CloseSequenceTask(output));
+
+                ClearSequenceTask(ref output);
+                #endregion
 
             }), false);
 
@@ -263,7 +380,23 @@ namespace FiveMGolf
 
         private async void RunSetup()
         {
-            while (!Scale.IsLoaded || !HasAdditionalTextLoaded(3))
+            foreach (string model in models)
+            {
+                uint m = (uint)GetHashKey(model);
+                if (IsModelValid(m))
+                {
+                    if (!HasModelLoaded(m))
+                    {
+                        RequestModel(m);
+                        while (!HasModelLoaded(m))
+                        {
+                            await Delay(0);
+                        }
+                    }
+                }
+            }
+
+            while (!Scale.IsLoaded || !HasAdditionalTextLoaded(3) || !Scale2.IsLoaded)
             {
                 await Delay(0);
             }
@@ -282,6 +415,7 @@ namespace FiveMGolf
             SetupPuttingMode();
             ToggleFlags(true);
 
+            SwingMeterStuff();
 
             CoursePar();
             SetScoreboardTitle();
@@ -293,8 +427,78 @@ namespace FiveMGolf
             Tick += OnTick;
         }
 
+        private void SwingMeterStuff()
+        {
+            Scale.CallFunction("SWING_METER_SET_MARKER", true, 0.5f, true, 0.0f);
+            Scale.CallFunction("SWING_METER_TRANSITION_IN");
+            Scale.CallFunction("SWING_METER_POSITION", 0.6f, 0.6f, 0.5f);
+            Scale.CallFunction("SWING_METER_SET_APEX_MARKER", true, 0.5f, true, 0.0f);
+            Scale.CallFunction("SWING_METER_SET_TARGET", 0.2f, 0.8f);
+            Scale.CallFunction("SWING_METER_SET_TARGET", 0.2f, 0.8f);
+
+            //Scale2.CallFunction("SET_DISTANCE", true, 0.5f, 0.6f, "test", "test2", "test3");
+
+            BeginScaleformMovieMethod(Scale2.Handle, "SET_SWING_DISTANCE");
+            ScaleformAddTextLabel("PREVIEW_DIST");
+            BeginTextCommandScaleformString("DIST");
+            AddTextComponentInteger(holes[currentHole - 1].Distance);
+            EndTextCommandScaleformString();
+            PushScaleformMovieMethodParameterString("0");
+            EndScaleformMovieMethod();
+
+            BeginScaleformMovieMethod(Scale2.Handle, "SET_STRENGTH");
+            ScaleformAddTextLabel("PREVIEW_PCT");
+            BeginTextCommandScaleformString("STRENGTH_PER");
+            AddTextComponentInteger(94);
+            EndTextCommandScaleformString();
+            PushScaleformMovieMethodParameterString("0");
+            EndScaleformMovieMethod();
+
+            BeginScaleformMovieMethod(Scale2.Handle, "SET_HEIGHT");
+            ScaleformAddTextLabel("PREVIEW_HT");
+            BeginTextCommandScaleformString("DIST_SHORT");
+            AddTextComponentInteger(80);
+            EndTextCommandScaleformString();
+            PushScaleformMovieMethodParameterString("0");
+            EndScaleformMovieMethod();
+
+            BeginScaleformMovieMethod(Scale2.Handle, "SET_PIN_DISTANCE");
+            ScaleformAddTextLabel("PREVIEW_PIN");
+            //ScaleformAddTextLabel("CARRY_DIST");
+            BeginTextCommandScaleformString("DIST");
+            AddTextComponentInteger(holes[currentHole - 1].Distance);
+            EndTextCommandScaleformString();
+            PushScaleformMovieMethodParameterString("0");
+            EndScaleformMovieMethod();
+
+            //Scale2.CallFunction("COLLAPSE", true);
+
+            //Scale2.CallFunction("SET_STRENGTH", "Strength", "100%", 0);
+            //Scale2.CallFunction("SET_SWING_DISTANCE", "Distance", "205 yds", 0);
+            //Scale2.CallFunction("SET_PIN_DISTANCE", "To Pin", "265 yds", 0);
+            //Scale2.CallFunction("SET_HEIGHT", "Height", "-2 ft", 1);
+        }
+
         private async Task OnTick()
         {
+
+            N_0x312342e1a4874f3f(holes[currentHole].HoleCoords.X, holes[currentHole].HoleCoords.Y, holes[currentHole].HoleCoords.Z, holes[currentHole].TeeCoords.X, holes[currentHole].TeeCoords.Y, holes[currentHole].TeeCoords.Z, 1f, 1f, false);
+            N_0xa51c4b86b71652ae(true);
+            N_0x2485d34e50a22e84(holes[currentHole].HoleCoords.X, holes[currentHole].HoleCoords.Y, holes[currentHole].HoleCoords.Z);
+            //int one = 0;
+            //int two = 0;
+            //int three = 0;
+            //N_0x632b2940c67f4ea9(Scale.Handle, ref one, ref two, ref three);
+            //Debug.WriteLine($"{one} : {two} : {three}");
+            //N_0xa356990e161c9e65(true);
+            //N_0x1c4fc5752bcd8e48(-1120.569f, 222.185f, 64.814f, -0.712f, 0.7f, 0f, 14.92f, 24.48f, -0.63f, 42f, 20f, 56.974f, 0.08f);
+            //N_0x5ce62918f8d703c7(255, 0, 0, 64, 255, 255, 255, 5, 255, 255, 0, 64);
+            //N_0x12995f2e53ffa601((int)holes[currentHole].HoleCoords.X, (int)holes[currentHole].HoleCoords.Y, (int)holes[currentHole].HoleCoords.Z, (int)holes[currentHole].TeeCoords.X, (int)holes[currentHole].TeeCoords.Y, (int)holes[currentHole].TeeCoords.Z, (int)holes[currentHole].HoleCoords.X, (int)holes[currentHole].HoleCoords.Y, (int)holes[currentHole].HoleCoords.Z, (int)holes[currentHole].TeeCoords.X, (int)holes[currentHole].TeeCoords.Y, (int)holes[currentHole].TeeCoords.Z);
+            //N_0x312342e1a4874f3f()
+            N_0x2485d34e50a22e84(0.025f, 0.3f, 0.025f);
+            N_0x12995f2e53ffa601(255, 255, 255, 100, 255, 255, 255, 100, 255, 255, 255, 100);
+            N_0x9cfdd90b2b844bf7(1f, 1f, 1f, 1f, 0.3f);
+
 
             #region controls
             if (Game.IsControlPressed(0, Control.ReplayShowhotkey)) // k
@@ -305,6 +509,8 @@ namespace FiveMGolf
             {
                 SetDisplay(15); // normal
             }
+            SetDisplay(15);
+            Scale2.Render2D();
 
             if (Game.IsControlJustPressed(0, Control.ReplayFOVIncrease))
             {
@@ -352,6 +558,7 @@ namespace FiveMGolf
             SetScoreboardTitle();
             DrawHoleMarker();
 
+
             Scale.Render2D();
 
 
@@ -361,6 +568,7 @@ namespace FiveMGolf
 
         private async Task PrepareTee()
         {
+            #region request models
             if (!HasModelLoaded(golfball_model_hash))
             {
                 RequestModel(golfball_model_hash);
@@ -371,8 +579,9 @@ namespace FiveMGolf
                 RequestModel(golfball_tee_model_hash);
                 while (!HasModelLoaded(golfball_tee_model_hash)) { await Delay(0); }
             }
+            #endregion
 
-
+            #region create objects and delete potential existing ones
             if (DoesObjectOfTypeExistAtCoords(holes[currentHole - 1].TeeCoords.X, holes[currentHole - 1].TeeCoords.Y, holes[currentHole - 1].TeeCoords.Z, 0.05f, golfball_tee_model_hash, false))
             {
                 int oldTee = GetClosestObjectOfType(holes[currentHole - 1].TeeCoords.X, holes[currentHole - 1].TeeCoords.Y, holes[currentHole - 1].TeeCoords.Z, 0.1f, golfball_tee_model_hash, false, false, false);
@@ -388,14 +597,20 @@ namespace FiveMGolf
             int tee = CreateObjectNoOffset(golfball_tee_model_hash, holes[currentHole - 1].TeeCoords.X, holes[currentHole - 1].TeeCoords.Y, holes[currentHole - 1].TeeCoords.Z, true, false, true);
             Debug.WriteLine("Tee created, id: " + tee.ToString());
 
-            int ball = CreateObjectNoOffset(golfball_model_hash, holes[currentHole - 1].TeeCoords.X, holes[currentHole - 1].TeeCoords.Y, holes[currentHole - 1].TeeCoords.Z + 0.05f, true, false, true);
+            ball = CreateObjectNoOffset(golfball_model_hash, holes[currentHole - 1].TeeCoords.X, holes[currentHole - 1].TeeCoords.Y, holes[currentHole - 1].TeeCoords.Z + 0.05f, true, false, true);
+            #endregion
+
+            #region create a blip for the ball
             int ball_blip = AddBlipForEntity(ball);
             Debug.WriteLine("Ball object ID: " + ball.ToString());
             Debug.WriteLine("Ball blip ID: " + ball_blip.ToString());
             SetBlipSprite(ball_blip, 143);
             SetBlipScale(ball_blip, 0.5f);
             SetBlipColour(ball_blip, 28 + 13);
+            #endregion
 
+
+            #region shooting the ball by setting velocity or applying force to entity (velocity for initial shot, force for spin effect)
             //SetEntityNoCollisionEntity(tee, ball, false);
 
             //await Delay(1000);
@@ -415,42 +630,8 @@ namespace FiveMGolf
             //SetEntityVelocity(ball, -a.X, -a.Y, 10f);
             //CreateCamWithParams()
             //ApplyForceToEntity(ball, 0, -100f, 0f, 0f, 0f, 0f, 0f, 0, false, false, false, false, true);
+            #endregion
 
-            //var ballCoords = holes[currentHole - 1].TeeCoords;
-            var holeCoords = holes[currentHole - 1].HoleCoords;
-            var offset = GetOffsetFromEntityInWorldCoords(ball, 0.2f, -0.6f, 0f);
-
-
-            float dx = offset.X - holeCoords.X;
-            float dy = offset.Y - holeCoords.Y;
-
-
-            //float dx = Game.PlayerPed.Position.X - GetEntityCoords(ball, true).X;
-            //float dy = Game.PlayerPed.Position.Y - GetEntityCoords(ball, true).Y;
-            float heading = GetHeadingFromVector_2d(dx, dy);
-
-            if (!HasAnimDictLoaded("mini@golfai"))
-            {
-                RequestAnimDict("mini@golfai");
-                while (!HasAnimDictLoaded("mini@golfai"))
-                {
-                    await Delay(0);
-                }
-            }
-            int output = 0;
-            ClearPedTasks(PlayerPedId());
-            OpenSequenceTask(ref output);
-
-            int club = CreateObject(GetHashKey("prop_golf_putter_01"), offset.X, offset.Y, offset.Z, true, false, false);
-
-            AttachEntityToEntity(club, PlayerPedId(), GetPedBoneIndex(PlayerPedId(), 28422), 0f, 0f, 0f, 0f, 0f, 0f, false, false, false, false, 2, true);
-            TaskFollowNavMeshToCoord(0, offset.X, offset.Y, offset.Z, 1f, -1, 0.25f, false, heading + 90f);
-            TaskPlayAnim(0, "mini@golfai", "putt_approach_no_ball", 2.0f, -4.0f, -1, 0, 0, false, false, false);
-            TaskPlayAnim(0, "mini@golfai", "putt_approach_no_ball", 4f, -4f, -1, 2, 0.999f, false, false, false);
-
-            TaskPerformSequence(PlayerPedId(), CloseSequenceTask(output));
-
-            ClearSequenceTask(ref output);
         }
 
         private void ToggleFlags(bool toggle)
